@@ -14,7 +14,6 @@ def format_name(name):
     else:
         return name
 
-
 def buscar_cliente_odoo(ci :str):
     url      = env('ODOO_URL')
     db       = env('ODOO_DB')
