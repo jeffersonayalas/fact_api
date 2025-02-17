@@ -6,9 +6,9 @@ from sqlalchemy.orm import sessionmaker
 url = URL(
     drivername = 'postgres',
     username = 'postgres',
-    password = 'postgres',
+    password = 'python24',
     host = 'localhost',
-    database = 'postgres',
+    database = 'posgres',
     port = '5432'
 )
 

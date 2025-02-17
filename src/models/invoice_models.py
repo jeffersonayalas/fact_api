@@ -12,10 +12,9 @@ class Clientes(Base):
 
 class Facturas(Base):
     __tablename__ = "facturas"
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True) #Numero de factura
     fecha = Column(Date)
     rif = Column(String)
-    numero_factura = Column(Integer, primary_key=True)  
     numero_control = Column(String, nullable=False)       
     monto = Column(Float, nullable=False)                  
     moneda = Column(String, nullable=False)  
