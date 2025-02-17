@@ -1,0 +1,26 @@
+N de Factura
+N de Control
+Fecha Factura
+RIF
+razon_social
+nota_debito
+nota_de_credito
+tipo_de_operacion
+numero_documento
+fecha_comprobante
+fecha_comprobante_retencion
+total_ventas_con_iva
+ventas_internas_no_grabadas
+base_imponible_g
+por_alicuota_g
+impuesto_iva_g
+base_imponible_r
+por_alicuota_r
+impuesto_iva_r
+base_imponible_a
+por_alicuota_a
+impuesto_iva_a
+iva_retenido
+igtf
+tasa_bcv
+iva_cta_tercero
