@@ -4,16 +4,18 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import date
 
+
 Base = declarative_base()
 
 class Cliente(Base):
     __tablename__ = "clientes"
-    odoo_id = Column(Integer, primary_key=True, nullable=True)
+    odoo_id = Column(Integer, primary_key=True, autoincrement=True)
     rif = Column(String)
     cod_galac = Column(String)
     nombre_cliente = Column(String)
 
 class ClienteBase(BaseModel):
+    odoo_id: int  
     rif: str
     cod_galac: Optional[str] = None
     nombre_cliente: str
@@ -92,3 +94,4 @@ class Factura(FacturaBase):
     id: int  # ID para la respuesta
     class Config:
         orm_mode = True
+

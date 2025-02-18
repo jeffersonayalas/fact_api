@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import clients, invoices  # Importar las rutas de clientes y facturas
-from app.db import init_db  # Importar la función de creación de tablas
+#from app.db import init_db  # Importar la función de creación de tablas
 
 app = FastAPI(title="Facturas", version="2.0")
 
@@ -21,7 +21,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-init_db()  # Llama a la función para crear las tablas
+
 
 # Incluir routers
 app.include_router(clients.router)  # Incluir el router de clientes
