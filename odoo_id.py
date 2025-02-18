@@ -1,3 +1,6 @@
+#En este script se debe recibir el id de odoo, realizar la consulta a la base de datos de facturacion
+#Y devolver las facturas del cliente
+
 import xmlrpc.client
 import json
 import environ
@@ -42,7 +45,7 @@ def buscar_cliente_odoo(ci :str):
     if not client_info:
         return False
     # Luego, obtenemos la información del cliente usando el id
-    client_info = models.execute_kw(db, uid, password, 'res.partner', 'read', [client_info[0]], {'fields': ['vat', 'name', 'email', 'street', 'phone', 'ref']})
+    client_info = models.execute_kw(db, uid, password, 'res.partner', 'read', [client_info[0]], {'fields': ['vat', 'identification_id', 'name', 'email', 'street', 'phone', 'ref']})
 
     if not client_info:
         return False
@@ -66,4 +69,4 @@ def buscar_cliente_odoo(ci :str):
     
     return client
 
-buscar_cliente_odoo('V-022412921')
+buscar_cliente_odoo('V-22412921')

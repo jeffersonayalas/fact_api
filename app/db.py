@@ -23,8 +23,10 @@ SessionLocal = sessionmaker(bind=engine)
 
 # Esta clase servirá como base para tus modelos
 Base = declarative_base()
-Base.metadata.create_all(bind=engine)
+
 # Función de dependencia para obtener la sesión de la base de datos
+def init_db():
+    Base.metadata.create_all(bind=engine)
 
 def get_db():
     db = SessionLocal()  # Crea una nueva sesión

@@ -9,19 +9,19 @@ Base = declarative_base()
 
 class Cliente(Base):
     __tablename__ = "clientes"
-    odoo_id = Column(Integer, primary_key=True, autoincrement=True)
+    odoo_id = Column(String, primary_key=True)
     rif = Column(String)
     cod_galac = Column(String)
     nombre_cliente = Column(String)
 
 class ClienteBase(BaseModel):
-    odoo_id: int  
+    odoo_id: str
     rif: str
     cod_galac: Optional[str] = None
     nombre_cliente: str
 
 class ClienteResponse(BaseModel):
-    odoo_id: int
+    odoo_id: str
     rif: str
     cod_galac: Optional[str] = None
     nombre_cliente: str

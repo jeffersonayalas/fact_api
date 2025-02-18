@@ -15,10 +15,9 @@ async def insert_factura(factura: FacturaBase, db: Session = Depends(get_db)):
 
 #Endpoint al cual se le envia el id de cliente (rif y retorna el numero de factura)
 @router.get("/{id}", response_model=Factura, tags=['Retornar Factura'])
-async def get_fact(id: int, db: Session = Depends(get_db)):
-    fact_query = db.query(Factura).filter(Factura.id == id).first()
+async def get_fact(id: str, db: Session = Depends(get_db)):
+    fact_query = db.query(Factura).filter(Factura.rif == id).all()
 
     if fact_query is None:
         raise HTTPException(status_code=404, detail="Factura no encontrada")
-    
     return fact_query
