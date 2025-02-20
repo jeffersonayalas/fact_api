@@ -3,22 +3,31 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 import pandas as pd
 from sqlalchemy.orm import Session
-from app.models.invoice_models import Factura, FacturaCreate  # Asegúrate de importar tus modelos
+from app.models.invoice_models import Cliente, Factura, FacturaCreate  # Asegúrate de importar tus modelos
 from app.db import get_db
 import numpy as np
+
+from .utils.odoo_con import buscar_cliente_odoo
 
 router = APIRouter()
 
 # Función para convertir valores a flotante con manejo de excepciones
 def convert_to_float(value):
     try:
-        if value is None:
-            return None
+        if value is None or value == '':
+            return 0.0  # En lugar de None, devolvemos 0.0
         if isinstance(value, str):
             return float(value.replace(',', '.'))
         return float(value)
     except (ValueError, TypeError):
-        return None
+        return 0.0  # En caso de error, devolvemos 0.0
+
+
+
+###########################################################
+###########################################################
+#########################################################
+
 
 # Función para convertir a tipo fecha con manejo de excepciones
 def convert_to_date(value):
@@ -28,6 +37,45 @@ def convert_to_date(value):
         return pd.to_datetime(value).date()
     except (ValueError, TypeError):
         return None
+    
+###########################################################
+###########################################################
+###########################################################
+
+
+def search_client(rif: str, db: Session):
+    client = db.query(Cliente).filter(Cliente.rif == rif).first()
+    print(f"🔍 Buscando cliente con RIF: {rif}")
+    
+    if client is not None:
+        print(f"🔍 Cliente encontrado: {client}")
+        return client.odoo_id  # Si ya existe, devolvemos el odoo_id
+
+    print("🔴 Cliente no encontrado en la base de datos. Buscando en Odoo...")
+    client = buscar_cliente_odoo(rif)  # Buscar en Odoo
+
+    if isinstance(client, dict) and 'id' in client:
+        # Si la respuesta es un diccionario y contiene 'id', guardamos el nuevo cliente
+        print(f"🔍 Cliente encontrado en Odoo: {client}")
+        new_client = Cliente(
+            odoo_id=client.get('id'),
+            rif=rif,
+            cod_galac="",
+            nombre_cliente=client.get('name', 'Nombre no disponible')  # Agregado un valor por defecto si no tiene 'name'
+        )
+        db.add(new_client)
+        db.commit()
+        return client.get('id')  # Retornamos el 'id' de Odoo
+    else:
+        # Log si Odoo no devuelve lo esperado
+        print(f"🔴 Error al buscar cliente en Odoo: {client}")
+        return None  # O manejar el error de otra manera
+
+
+###########################################################
+###########################################################
+###########################################################
+
 
 @router.post("/upload-csv/", tags=['Subir CSV'])
 async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
@@ -61,34 +109,54 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
     print("📄 Diccionario resultante:")
     print(data_dict)
 
+    # Lista para almacenar entradas duplicadas
+    duplicados = []
+
     # Mapear y guardar en la base de datos
     for record in data_dict:
+        odoo_id = search_client(record.get('RIF'), db)
+        print(f"🔍 ID de cliente en Odoo: {odoo_id}")
+
+        # Verificar si la factura ya existe
+        existing_factura = db.query(Factura).filter(
+            Factura.numero_factura == str(record.get('Numero Factura')),
+            Factura.rif == record.get('RIF')
+        ).first()
+
+        if existing_factura:
+            duplicados.append(record)
+            print(f"🔴 Entrada duplicada encontrada: {record}")
+            continue  # Ignorar esta entrada y continuar con la siguiente
+
         factura_data = FacturaCreate(
             fecha=convert_to_date(record.get('Fecha Factura')),
             rif=record.get('RIF'),
             numero_control=record.get('N de Control'),
-            monto=convert_to_float(record.get('Total Ventas con IVA')),
-            moneda='VES',  # Aquí se podría hacer más flexible si fuera necesario
+            numero_factura=str(record.get('Numero Factura')),
+            monto=convert_to_float(record.get('Total Ventas con IVA', 0.0)),
+            moneda='VES',  # Se podría hacer más flexible si fuera necesario
             razon_social=record.get('Nombre o Razon Social'),
             nota_debito=record.get('Nota de Debito'),
             nota_de_credito=record.get('Nota de Credito'),
             tipo_de_operacion=record.get('Tipo Operacion'),
             numero_documento=record.get('N Documento Afectado'),
             fecha_comprobante=convert_to_date(record.get('Fecha Comprobante Retencion')),
-            base_imponible_g=convert_to_float(record.get('Base Imponible G')),
-            por_alicuota_g=convert_to_float(record.get('% Alicuota G')),
-            impuesto_iva_g=convert_to_float(record.get('Impuesto IVA G')),
-            base_imponible_r=convert_to_float(record.get('Base Imponible R')),
-            por_alicuota_r=convert_to_float(record.get('% Alicuota R')),
-            impuesto_iva_r=convert_to_float(record.get('Impuesto IVA R')),
-            base_imponible_a=convert_to_float(record.get('Base Imponible A')),
-            por_alicuota_a=convert_to_float(record.get('% Alicuota A')),
-            impuesto_iva_a=convert_to_float(record.get('Impuesto IVA A')),
-            iva_retenido=convert_to_float(record.get('IVA Retenido')),
-            igtf=convert_to_float(record.get('IGTF')),
-            tasa_bcv=convert_to_float(record.get('Tasa BCV')),
-            iva_cta_tercero=convert_to_float(record.get('IVA Cta Tercero'))
+            base_imponible_g=convert_to_float(record.get('Base Imponible G', 0.0)),
+            por_alicuota_g=convert_to_float(record.get('% Alicuota G', 0.0)),
+            impuesto_iva_g=convert_to_float(record.get('Impuesto IVA G', 0.0)),
+            base_imponible_r=convert_to_float(record.get('Base Imponible R', 0.0)),
+            por_alicuota_r=convert_to_float(record.get('% Alicuota R', 0.0)),
+            impuesto_iva_r=convert_to_float(record.get('Impuesto IVA R', 0.0)),
+            base_imponible_a=convert_to_float(record.get('Base Imponible A', 0.0)),
+            por_alicuota_a=convert_to_float(record.get('% Alicuota A', 0.0)),
+            impuesto_iva_a=convert_to_float(record.get('Impuesto IVA A', 0.0)),
+            iva_retenido=convert_to_float(record.get('IVA Retenido', 0.0)),
+            igtf=convert_to_float(record.get('IGTF', 0.0)),
+            tasa_bcv=convert_to_float(record.get('Tasa BCV', 0.0)),
+            iva_cta_tercero=convert_to_float(record.get('IVA Cta Tercero', 0.0)),
+            odoo_id=odoo_id
         )
+
 
         # Crear la factura en base de datos
         factura = Factura(**factura_data.model_dump())  # Create SQLAlchemy object
@@ -104,4 +172,7 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al guardar en la base de datos: {str(e)}")
 
-    return JSONResponse(content={"message": "CSV procesado y datos guardados correctamente"})
+    return JSONResponse(content={
+        "message": "CSV procesado y datos guardados correctamente",
+        "duplicados": duplicados
+    })
