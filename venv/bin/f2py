@@ -1,4 +1,4 @@
-#!/home/desarrollo/Escritorio/consulta_facturas/venv/bin/python3
+#!/home/fran/Desktop/fact_api/venv/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys

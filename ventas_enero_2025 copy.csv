@@ -1,0 +1,9 @@
+Empresa:;NETCOM PLUS, C.A.;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+RIF:;J-411823643;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Periodo Desde:;2025-01-01;Hasta;2025-01-31;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+LIBRO DE VENTAS;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Operacion N;Fecha Factura;RIF;Nombre o Razon Social;RIF Tercero;Nombre o Razon Social Tercero;N de Control;N de Factura;Nota de Debito;Nota de Credito;Tipo Operacion;N Documento Afectado;Fecha Comprobante Retencion;Numero Comprobante Retencion;Total Ventas con IVA;Ventas Internas No Gravadas;Base Imponible G;% Alicuota G;Impuesto IVA G;Base Imponible R;% Alicuota R;Impuesto IVA R;Base Imponible A;% Alicuota A;Impuesto IVA A;IVA Retenido;IGTF;Tasa BCV;IVA Cta Tercero;;;;;
+1;2025-01-02;J-310898065;A.D.C.  PRECISION Y CORTE  C.A.;;;00-00235913; 00315161;;;01-reg;;;;1810,30;0,00;1560,60;16,00;249,70;0,00;8,00;0,00;0,00;31,00;0,00;0,00;0,00;52,02;0;;;;;
