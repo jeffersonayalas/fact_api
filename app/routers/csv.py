@@ -28,8 +28,13 @@ def convert_to_float(value):
 ###########################################################
 #########################################################
 
+def agregar_ceros(numero):
+    return str(numero).zfill(8)
 
-# Función para convertir a tipo fecha con manejo de excepciones
+###########################################################
+###########################################################
+#########################################################
+
 def convert_to_date(value):
     try:
         if value is None:
@@ -44,6 +49,10 @@ def convert_to_date(value):
 
 
 def search_client(rif: str, db: Session):
+    """
+        Primero se busca al cliente en BD local, si no se encuentra se busca en Odoo
+        y se mapea su fir con su Odoo_Id
+    """
     client = db.query(Cliente).filter(Cliente.rif == rif).first()
     print(f"🔍 Buscando cliente con RIF: {rif}")
     
@@ -79,6 +88,9 @@ def search_client(rif: str, db: Session):
 
 @router.post("/upload-csv/", tags=['Subir CSV'])
 async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """
+    Este endpoint recibe un archivo CSV generadop por The factory y lo procesa para guardar los datos en la base de datos.
+    """
     # Verificar que el archivo sea un CSV
     if file.content_type != 'text/csv':
         raise HTTPException(status_code=400, detail="El archivo debe ser un CSV")
@@ -106,8 +118,8 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
     data_dict = df.to_dict(orient='records')
 
     # Imprimir el diccionario resultante
-    print("📄 Diccionario resultante:")
-    print(data_dict)
+    # print("📄 Diccionario resultante:")
+    # print(data_dict)
 
     # Lista para almacenar entradas duplicadas
     duplicados = []
@@ -119,7 +131,7 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
 
         # Verificar si la factura ya existe
         existing_factura = db.query(Factura).filter(
-            Factura.numero_factura == str(record.get('Numero Factura')),
+            Factura.numero_control == str(record.get('N de Control')),
             Factura.rif == record.get('RIF')
         ).first()
 
@@ -132,7 +144,7 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
             fecha=convert_to_date(record.get('Fecha Factura')),
             rif=record.get('RIF'),
             numero_control=record.get('N de Control'),
-            numero_factura=str(record.get('Numero Factura')),
+            numero_factura=str(agregar_ceros(int(record.get('N de Factura')))),
             monto=convert_to_float(record.get('Total Ventas con IVA', 0.0)),
             moneda='VES',  # Se podría hacer más flexible si fuera necesario
             razon_social=record.get('Nombre o Razon Social'),
