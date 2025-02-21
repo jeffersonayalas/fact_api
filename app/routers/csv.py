@@ -162,11 +162,19 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
             print(f"🔴 Entrada duplicada encontrada: {record}")
             continue  # Ignorar esta entrada y continuar con la siguiente
 
+        numero_factura_valor = record.get('N de Factura')
+        numero_factura = ""
+
+        try:
+            numero_factura = str(agregar_ceros(int(numero_factura_valor))) if numero_factura_valor else ""
+        except (ValueError, TypeError):
+            numero_factura = ""
+
         factura_data = FacturaCreate(
             fecha=convert_to_date(record.get('Fecha Factura')),
             rif=record.get('RIF'),
             numero_control=record.get('N de Control'),
-            numero_factura=str(agregar_ceros(int(record.get('N de Factura')))),
+            numero_factura=numero_factura,
             monto=convert_to_float(record.get('Total Ventas con IVA', 0.0)),
             moneda='VES',  # Se podría hacer más flexible si fuera necesario
             razon_social=record.get('Nombre o Razon Social'),
