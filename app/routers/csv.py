@@ -47,38 +47,60 @@ def convert_to_date(value):
 ###########################################################
 ###########################################################
 
+import logging
+from sqlalchemy.exc import IntegrityError
+
+# Configuración básica del log de errores
+logging.basicConfig(filename="error_log.log", level=logging.ERROR, format="%(asctime)s - %(message)s")
 
 def search_client(rif: str, db: Session):
     """
         Primero se busca al cliente en BD local, si no se encuentra se busca en Odoo
-        y se mapea su fir con su Odoo_Id
+        y se mapea su RIF con su Odoo_Id.
     """
     client = db.query(Cliente).filter(Cliente.rif == rif).first()
     print(f"🔍 Buscando cliente con RIF: {rif}")
     
     if client is not None:
-        print(f"🔍 Cliente encontrado: {client}")
+        print(f"✅ Cliente encontrado en la base de datos: {client}")
         return client.odoo_id  # Si ya existe, devolvemos el odoo_id
 
     print("🔴 Cliente no encontrado en la base de datos. Buscando en Odoo...")
     client = buscar_cliente_odoo(rif)  # Buscar en Odoo
 
     if isinstance(client, dict) and 'id' in client:
-        # Si la respuesta es un diccionario y contiene 'id', guardamos el nuevo cliente
         print(f"🔍 Cliente encontrado en Odoo: {client}")
         new_client = Cliente(
             odoo_id=client.get('id'),
             rif=rif,
             cod_galac="",
-            nombre_cliente=client.get('name', 'Nombre no disponible')  # Agregado un valor por defecto si no tiene 'name'
+            nombre_cliente=client.get('name', 'Nombre no disponible')
         )
-        db.add(new_client)
-        db.commit()
-        return client.get('id')  # Retornamos el 'id' de Odoo
+        try:
+            db.add(new_client)
+            db.commit()
+            return new_client.odoo_id  # Retornamos el 'id' de Odoo
+        except IntegrityError as e:
+            db.rollback()
+            print(f"⚠️ Entrada duplicada detectada para Odoo ID {client.get('id')}, recuperando entrada existente...")
+
+            # Buscar y devolver la entrada existente en la base de datos
+            existing_client = db.query(Cliente).filter(Cliente.odoo_id == client.get('id')).first()
+            
+            if existing_client:
+                logging.error(f"Duplicated entry: {existing_client}")
+                return existing_client.odoo_id
+            else:
+                logging.error(f"⚠️ Error inesperado: el cliente con Odoo ID {client.get('id')} no fue encontrado después del error de duplicación.")
+                return None
+        except Exception as e:
+            db.rollback()
+            print(f"🔴 Error al guardar cliente en BD local: {str(e)}")
+            logging.error(f"Error inesperado al insertar cliente: {str(e)}")
+            return None
     else:
-        # Log si Odoo no devuelve lo esperado
         print(f"🔴 Error al buscar cliente en Odoo: {client}")
-        return None  # O manejar el error de otra manera
+        return None
 
 
 ###########################################################
