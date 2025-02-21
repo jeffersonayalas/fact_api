@@ -25,8 +25,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-
 # Incluir routers
 app.include_router(clients.router)  # Incluir el router de clientes
 app.include_router(invoices.router)  # Incluir el router de facturas
