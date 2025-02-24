@@ -47,61 +47,84 @@ def convert_to_date(value):
 ###########################################################
 ###########################################################
 
+import re
 import logging
 from sqlalchemy.exc import IntegrityError
 
-# Configuración básica del log de errores
+# Configuración básica del log de errores generales
 logging.basicConfig(filename="error_log.log", level=logging.ERROR, format="%(asctime)s - %(message)s")
+
+# Configuración del logger para cédulas no encontradas
+cedula_not_found_logger = logging.getLogger("cedula_not_found")
+cedula_not_found_logger.setLevel(logging.WARNING)  # Nivel de severidad WARNING
+
+# Crear un manejador de archivo para este logger
+handler = logging.FileHandler("cedula_not_found.log")
+handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
+cedula_not_found_logger.addHandler(handler)
+
 
 def search_client(rif: str, db: Session):
     """
         Primero se busca al cliente en BD local, si no se encuentra se busca en Odoo
-        y se mapea su RIF con su Odoo_Id.
+        probando diferentes configuraciones de RIF y se mapea su RIF con su Odoo_Id.
     """
-    client = db.query(Cliente).filter(Cliente.rif == rif).first()
-    print(f"🔍 Buscando cliente con RIF: {rif}")
+    rif = rif.strip().upper()
+    rif_pattern = re.compile(r'^[VJGP]-\d{4,}$')  # Expresión regular para validar formato RIF
     
-    if client is not None:
-        print(f"✅ Cliente encontrado en la base de datos: {client}")
-        return client.odoo_id  # Si ya existe, devolvemos el odoo_id
-
-    print("🔴 Cliente no encontrado en la base de datos. Buscando en Odoo...")
-    client = buscar_cliente_odoo(rif)  # Buscar en Odoo
-
-    if isinstance(client, dict) and 'id' in client:
-        print(f"🔍 Cliente encontrado en Odoo: {client}")
-        new_client = Cliente(
-            odoo_id=client.get('id'),
-            rif=rif,
-            cod_galac="",
-            nombre_cliente=client.get('name', 'Nombre no disponible')
-        )
-        try:
-            db.add(new_client)
-            db.commit()
-            return new_client.odoo_id  # Retornamos el 'id' de Odoo
-        except IntegrityError as e:
-            db.rollback()
-            print(f"⚠️ Entrada duplicada detectada para Odoo ID {client.get('id')}, recuperando entrada existente...")
-
-            # Buscar y devolver la entrada existente en la base de datos
-            existing_client = db.query(Cliente).filter(Cliente.odoo_id == client.get('id')).first()
-            
-            if existing_client:
-                logging.error(f"Duplicated entry: {existing_client}")
-                return existing_client.odoo_id
-            else:
-                logging.error(f"⚠️ Error inesperado: el cliente con Odoo ID {client.get('id')} no fue encontrado después del error de duplicación.")
-                return None
-        except Exception as e:
-            db.rollback()
-            print(f"🔴 Error al guardar cliente en BD local: {str(e)}")
-            logging.error(f"Error inesperado al insertar cliente: {str(e)}")
-            return None
+    # Si es solo un número, probar con los prefijos V, J, G, P
+    if rif.isdigit():
+        posibles_rif = [f"{prefix}-{rif}" for prefix in ["V", "J", "G", "P"]]
+    elif rif_pattern.match(rif):
+        posibles_rif = [rif]
     else:
-        print(f"🔴 Error al buscar cliente en Odoo: {client}")
-        return None
-
+        print(f"⚠️ Formato de RIF no estándar: {rif}. Intentando búsqueda de todos modos...")
+        posibles_rif = [rif]
+    
+    for rif_attempt in posibles_rif:
+        print(f"🔍 Buscando cliente con RIF: {rif_attempt}")
+        client = db.query(Cliente).filter(Cliente.rif == rif_attempt).first()
+        
+        if client is not None:
+            print(f"✅ Cliente encontrado en la base de datos: {client}")
+            return client.odoo_id
+        
+        print("🟡 Cliente no encontrado en la base de datos. Buscando en Odoo...")
+        client = buscar_cliente_odoo(rif_attempt)
+        
+        if isinstance(client, dict) and 'id' in client:
+            print(f"🔍 Cliente encontrado en Odoo con {rif_attempt}: {client}")
+            new_client = Cliente(
+                odoo_id=client.get('id'),
+                rif=rif_attempt,
+                cod_galac="",
+                nombre_cliente=client.get('name', 'Nombre no disponible')
+            )
+            try:
+                db.add(new_client)
+                db.commit()
+                return new_client.odoo_id
+            except IntegrityError:
+                db.rollback()
+                print(f"⚠️ Entrada duplicada detectada para Odoo ID {client.get('id')}, recuperando entrada existente...")
+                existing_client = db.query(Cliente).filter(Cliente.odoo_id == client.get('id')).first()
+                
+                if existing_client:
+                    logging.error(f"Duplicated entry: {existing_client}")
+                    return existing_client.odoo_id
+                else:
+                    logging.error(f"⚠️ Error inesperado: el cliente con Odoo ID {client.get('id')} no fue encontrado después del error de duplicación.")
+                    return None
+            except Exception as e:
+                db.rollback()
+                print(f"🔴 Error al guardar cliente en BD local: {str(e)}")
+                logging.error(f"Error inesperado al insertar cliente: {str(e)}")
+                return None
+    
+    # Registrar en el log de cédulas no encontradas
+    cedula_not_found_logger.warning(f"😥 Cédula no encontrada: {rif}")
+    print(f"😥 Cliente no encontrado en ninguna variación en Odoo: {rif}")
+    return None
 
 ###########################################################
 ###########################################################
