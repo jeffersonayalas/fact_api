@@ -63,33 +63,70 @@ handler = logging.FileHandler("cedula_not_found.log")
 handler.setFormatter(logging.Formatter("%(asctime)s - %(message)s"))
 cedula_not_found_logger.addHandler(handler)
 
+###########################################################
+###########################################################
+###########################################################
+
+
+def validar_y_generar_rif(documento):
+    """
+    Valida el formato del documento (RIF) y siempre retorna una lista.
+
+    Parámetros:
+        documento (str o int): El documento a validar o procesar.
+
+    Retorna:
+        - Si el formato es correcto, devuelve una lista con el documento.
+        - Si el documento es solo numérico, devuelve una lista con las 4 configuraciones posibles.
+        - Si el formato no es válido, devuelve una lista vacía.
+    """
+    # Convertir a string si es un número
+    if isinstance(documento, int):
+        documento = str(documento)
+    
+    documento = documento.strip().upper()  # Normalizar el documento
+    
+    # Expresión regular para validar el formato del RIF
+    rif_pattern = re.compile(r'^[VJGP]-\d{4,}$')
+    
+    # Validar si el documento tiene un formato de RIF válido
+    if rif_pattern.match(documento):
+        print(f"✅ RIF válido: {documento}")
+        return [documento]  # Retornar el documento en una lista
+    
+    # Si el documento es solo numérico, generar las 4 configuraciones
+    if documento.isdigit():
+        documentos = [f"{prefix}-{documento}" for prefix in ["V", "J", "G", "P"]]
+        return documentos
+    
+    # Si no cumple con ningún formato válido, retornar una lista vacía
+    return []
+
+###########################################################
+###########################################################
+###########################################################
+
 
 def search_client(rif: str, db: Session):
     """
-        Primero se busca al cliente en BD local, si no se encuentra se busca en Odoo
-        probando diferentes configuraciones de RIF y se mapea su RIF con su Odoo_Id.
+    Primero se busca al cliente en BD local, si no se encuentra se busca en Odoo
+    probando diferentes configuraciones de RIF y se mapea su RIF con su Odoo_Id.
     """
-    rif = rif.strip().upper()
-    rif_pattern = re.compile(r'^[VJGP]-\d{4,}$')  # Expresión regular para validar formato RIF
-    
-    # Si es solo un número, probar con los prefijos V, J, G, P
-    if rif.isdigit():
-        posibles_rif = [f"{prefix}-{rif}" for prefix in ["V", "J", "G", "P"]]
-    elif rif_pattern.match(rif):
-        posibles_rif = [rif]
-    else:
-        print(f"⚠️ Formato de RIF no estándar: {rif}. Intentando búsqueda de todos modos...")
-        posibles_rif = [rif]
+    print(" ")
+    print(f"--- 🔍 Iniciando Busqueda: {rif} 🔍 ---")
+    posibles_rif = validar_y_generar_rif(rif)
+
+    print(f"⚠️ RIF POSIBLES FINAL: {posibles_rif}")
     
     for rif_attempt in posibles_rif:
         print(f"🔍 Buscando cliente con RIF: {rif_attempt}")
         client = db.query(Cliente).filter(Cliente.rif == rif_attempt).first()
         
         if client is not None:
-            print(f"✅ Cliente encontrado en la base de datos: {client}")
+            print(f"✅ Cliente encontrado en la base de datos: {client.__dict__}")
             return client.odoo_id
         
-        print("🟡 Cliente no encontrado en la base de datos. Buscando en Odoo...")
+        print(f"🟡 Cliente no encontrado en la base de datos. Buscando en Odoo con documento {rif_attempt}...")
         client = buscar_cliente_odoo(rif_attempt)
         
         if isinstance(client, dict) and 'id' in client:
@@ -110,7 +147,7 @@ def search_client(rif: str, db: Session):
                 existing_client = db.query(Cliente).filter(Cliente.odoo_id == client.get('id')).first()
                 
                 if existing_client:
-                    logging.error(f"Duplicated entry: {existing_client}")
+                    logging.error(f"Duplicated entry: {existing_client.__dict__}")
                     return existing_client.odoo_id
                 else:
                     logging.error(f"⚠️ Error inesperado: el cliente con Odoo ID {client.get('id')} no fue encontrado después del error de duplicación.")
@@ -235,6 +272,7 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
         db.commit()
     except Exception as e:
         # Revertir los cambios en caso de error
+        logging.error(f"Error: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al guardar en la base de datos: {str(e)}")
 
