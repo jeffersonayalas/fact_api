@@ -148,9 +148,6 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
 
     # Mapear y guardar en la base de datos
     for record in data_dict:
-        odoo_id = search_client(record.get('RIF'), db)
-        print(f"🔍 ID de cliente en Odoo: {odoo_id}")
-
         # Verificar si la factura ya existe
         existing_factura = db.query(Factura).filter(
             Factura.numero_control == str(record.get('N de Control')),
@@ -159,8 +156,12 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
 
         if existing_factura:
             duplicados.append(record)
-            print(f"🔴 Entrada duplicada encontrada: {record}")
+            print(f"🍴 Entrada duplicada encontrada: {record}")
             continue  # Ignorar esta entrada y continuar con la siguiente
+        
+        odoo_id = search_client(record.get('RIF'), db)
+        print(f"🔍 ID de cliente en Odoo: {odoo_id}")
+
 
         numero_factura_valor = record.get('N de Factura')
         numero_factura = ""
@@ -179,9 +180,9 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
             moneda='VES',  # Se podría hacer más flexible si fuera necesario
             razon_social=record.get('Nombre o Razon Social'),
             nota_debito=record.get('Nota de Debito'),
-            nota_de_credito=record.get('Nota de Credito'),
+            nota_de_credito=str(record.get('Nota de Credito', "")),  # Convertir a str
             tipo_de_operacion=record.get('Tipo Operacion'),
-            numero_documento=record.get('N Documento Afectado'),
+            numero_documento=str(record.get('N Documento Afectado', "")),  # Convertir a str
             fecha_comprobante=convert_to_date(record.get('Fecha Comprobante Retencion')),
             base_imponible_g=convert_to_float(record.get('Base Imponible G', 0.0)),
             por_alicuota_g=convert_to_float(record.get('% Alicuota G', 0.0)),
