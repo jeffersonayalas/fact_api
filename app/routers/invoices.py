@@ -22,3 +22,4 @@ async def get_fact(id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Factura no encontrada")
     
     return fact_query  # Aquí también puedes mapear a FacturaResponse si es necesario
+
