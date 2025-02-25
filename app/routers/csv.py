@@ -6,21 +6,23 @@ from sqlalchemy.orm import Session
 from app.models.invoice_models import Cliente, Factura, FacturaCreate  # Asegúrate de importar tus modelos
 from app.db import get_db
 import numpy as np
+import re
 
 from .utils.odoo_con import buscar_cliente_odoo
 
 router = APIRouter()
 
 # Función para convertir valores a flotante con manejo de excepciones
+
 def convert_to_float(value):
     try:
-        if value is None or value == '':
-            return 0.0  # En lugar de None, devolvemos 0.0
-        if isinstance(value, str):
-            return float(value.replace(',', '.'))
+        if not value or str(value).strip() == '':
+            return 0.0
+        value = re.sub(r'[^\d,.-]', '', str(value))  # Elimina caracteres extraños
+        value = value.replace(',', '.')  # Convertir a punto decimal
         return float(value)
     except (ValueError, TypeError):
-        return 0.0  # En caso de error, devolvemos 0.0
+        return 0.0
 
 
 
@@ -29,7 +31,10 @@ def convert_to_float(value):
 #########################################################
 
 def agregar_ceros(numero):
+    if not numero:
+        return "00000000"
     return str(numero).zfill(8)
+
 
 ###########################################################
 ###########################################################
@@ -47,7 +52,6 @@ def convert_to_date(value):
 ###########################################################
 ###########################################################
 
-import re
 import logging
 from sqlalchemy.exc import IntegrityError
 
@@ -87,7 +91,7 @@ def validar_y_generar_rif(documento):
     documento = documento.strip().upper()  # Normalizar el documento
     
     # Expresión regular para validar el formato del RIF
-    rif_pattern = re.compile(r'^[VJGP]-\d{4,}$')
+    rif_pattern = re.compile(r'^[VJGP]-\d{6,}$')
     
     # Validar si el documento tiene un formato de RIF válido
     if rif_pattern.match(documento):
@@ -168,10 +172,13 @@ def search_client(rif: str, db: Session):
 ###########################################################
 
 
+import asyncio
+
 @router.post("/upload-csv/", tags=['Subir CSV'])
 async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    # Tu código aquí
     """
-    Este endpoint recibe un archivo CSV generadop por The factory y lo procesa para guardar los datos en la base de datos.
+    Este endpoint recibe un archivo CSV generado por The factory y lo procesa para guardar los datos en la base de datos.
     """
     # Verificar que el archivo sea un CSV
     if file.content_type != 'text/csv':
@@ -184,11 +191,12 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
     string_io = StringIO(contents.decode('utf-8'))
     
     try:
-        # Leer el CSV, ignorando las primeras 7 filas y usando ';' como separador
-        df = pd.read_csv(string_io, encoding='utf-8', sep=';', skiprows=7)
-    except Exception as e:
-        print(e)
-        raise HTTPException(status_code=400, detail="Error al procesar el CSV")
+        df = pd.read_csv(string_io, encoding='utf-8', sep=';', skiprows=7, dtype=str)  # Lee todo como string
+    except pd.errors.ParserError:
+        raise HTTPException(status_code=400, detail="Formato de CSV inválido")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Error de codificación, asegúrate de que el archivo esté en UTF-8")
+
 
     # Limpiar nombres de columnas
     df.columns = df.columns.str.strip()
@@ -199,15 +207,14 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
     # Convertir el DataFrame a un diccionario
     data_dict = df.to_dict(orient='records')
 
-    # Imprimir el diccionario resultante
-    # print("📄 Diccionario resultante:")
-    # print(data_dict)
-
     # Lista para almacenar entradas duplicadas
     duplicados = []
 
-    # Mapear y guardar en la base de datos
-    for record in data_dict:
+    # Función asíncrona para procesar cada registro
+    async def process_record(record):
+        odoo_id = search_client(record.get('RIF'), db)
+        print(f"🔍 ID de cliente en Odoo: {odoo_id}")
+
         # Verificar si la factura ya existe
         existing_factura = db.query(Factura).filter(
             Factura.numero_control == str(record.get('N de Control')),
@@ -216,12 +223,8 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
 
         if existing_factura:
             duplicados.append(record)
-            print(f"🍴 Entrada duplicada encontrada: {record}")
-            continue  # Ignorar esta entrada y continuar con la siguiente
-        
-        odoo_id = search_client(record.get('RIF'), db)
-        print(f"🔍 ID de cliente en Odoo: {odoo_id}")
-
+            print(f"🔴 Entrada duplicada encontrada: {record}")
+            return  # Ignorar esta entrada y continuar con la siguiente
 
         numero_factura_valor = record.get('N de Factura')
         numero_factura = ""
@@ -240,9 +243,9 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
             moneda='VES',  # Se podría hacer más flexible si fuera necesario
             razon_social=record.get('Nombre o Razon Social'),
             nota_debito=record.get('Nota de Debito'),
-            nota_de_credito=str(record.get('Nota de Credito', "")),  # Convertir a str
+            nota_de_credito=record.get('Nota de Credito'),
             tipo_de_operacion=record.get('Tipo Operacion'),
-            numero_documento=str(record.get('N Documento Afectado', "")),  # Convertir a str
+            numero_documento=record.get('N Documento Afectado'),
             fecha_comprobante=convert_to_date(record.get('Fecha Comprobante Retencion')),
             base_imponible_g=convert_to_float(record.get('Base Imponible G', 0.0)),
             por_alicuota_g=convert_to_float(record.get('% Alicuota G', 0.0)),
@@ -260,19 +263,23 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
             odoo_id=odoo_id
         )
 
-
         # Crear la factura en base de datos
         factura = Factura(**factura_data.model_dump())  # Create SQLAlchemy object
 
         # Agregar la factura a la sesión
         db.add(factura)
 
+    # Crear tareas asíncronas para cada registro
+    tasks = [process_record(record) for record in data_dict]
+
+    # Ejecutar todas las tareas en paralelo
+    await asyncio.gather(*tasks)
+
     try:
         # Confirmar los cambios en la base de datos
         db.commit()
     except Exception as e:
         # Revertir los cambios en caso de error
-        logging.error(f"Error: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error al guardar en la base de datos: {str(e)}")
 
