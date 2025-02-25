@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Date as SQLAlchemyDate, Float
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import declarative_base
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import date
 import uuid
@@ -12,14 +12,14 @@ class Cliente(Base):
     __tablename__ = "clientes"
 
     # Crea el campo uuid como un UUID, usando uuid4 para generar un valor por defecto
-    uuid = Column(UUID(as_uuid=True), default=uuid.uuid4)
-    odoo_id = Column(String, nullable=True)
-    rif = Column(String, primary_key=True, nullable=False)
+    uuid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    odoo_id = Column(String, unique=True, nullable=True)  # Campo único
+    rif = Column(String, nullable=False)
     cod_galac = Column(String, nullable=True)
     nombre_cliente = Column(String, nullable=False)
 
 class ClienteBase(BaseModel):
-    uuid: Optional[str] = None  # UUID opcional
+    uuid: str = Field(default_factory=lambda: str(uuid.uuid4()))  # UUID siempre generado
     odoo_id: Optional[str] = None
     rif: str
     cod_galac: Optional[str] = None
@@ -38,8 +38,7 @@ class ClienteResponse(BaseModel):
 class Factura(Base):
     __tablename__ = "facturas"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    uuid = Column(UUID(as_uuid=True), default=uuid.uuid4)  # UUID auto-generado
+    uuid = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)  # UUID auto-generado
     fecha = Column(SQLAlchemyDate)
     rif = Column(String)
     numero_control = Column(String, nullable=True)
@@ -71,7 +70,7 @@ class Factura(Base):
     odoo_id = Column(Integer, nullable=True)
 
 class FacturaBase(BaseModel):
-    uuid: Optional[str] = None  # UUID opcional
+    uuid: str = Field(default_factory=lambda: str(uuid.uuid4()))  # UUID siempre generado
     fecha: date
     rif: str
     numero_control: Optional[str] = None
@@ -106,7 +105,7 @@ class FacturaCreate(FacturaBase):
     pass  # No ID, ya que es auto-generado por la base de datos.
 
 class FacturaResponse(FacturaBase):
-    id: Optional[int] = None  # ID opcional para la validación de Pydantic.
+    uuid: str  # ID siempre se espera en la respuesta
 
     class Config:  # Clase Config dentro de FacturaResponse.
         orm_mode = True  # Habilitar orm_mode.

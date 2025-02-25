@@ -5,11 +5,10 @@ import pandas as pd
 from sqlalchemy.orm import Session
 from app.models.invoice_models import Cliente, Factura, FacturaCreate  # Asegúrate de importar tus modelos
 from app.db import get_db
-import numpy as np
 import re
+import numpy as np
 
 from .utils.odoo_con import buscar_cliente_odoo
-import requests
 
 router = APIRouter()
 

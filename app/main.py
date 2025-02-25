@@ -1,4 +1,3 @@
-from fastapi.responses import JSONResponse
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import clients, invoices, csv, pdf  # Importar las rutas de clientes y facturas

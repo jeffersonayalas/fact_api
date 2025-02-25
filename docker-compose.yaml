@@ -1,16 +1,15 @@
+version: '3.8'
 
 services:
-  postgres:
-    image: postgres:latest  # Usa la imagen oficial de PostgreSQL
-    container_name: postgres
+  fastapi_app:
+    build: ..
+    container_name: fact_api
+    restart: always
     ports:
-      - "5432:5432"  # Expone el puerto de PostgreSQL
-    environment:
-      - POSTGRES_USER=postgres  # Usuario de PostgreSQL
-      - POSTGRES_PASSWORD=123456  # Contraseña de PostgreSQL
-      - POSTGRES_DB=postgres  # Nombre de la base de datos
+      - "8080:8080"
     volumes:
-      - postgres_data:/var/lib/postgresql/data  # Persistir datos de la base de datos
-
-volumes:
-  postgres_data:  # Define un volumen para almacenar datos de PostgreSQL
+      - .:/app
+    working_dir: /app
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on: []
