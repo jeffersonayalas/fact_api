@@ -9,6 +9,7 @@ import numpy as np
 import re
 
 from .utils.odoo_con import buscar_cliente_odoo
+import requests
 
 router = APIRouter()
 

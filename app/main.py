@@ -1,7 +1,7 @@
 from fastapi.responses import JSONResponse
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import clients, invoices, csv  # Importar las rutas de clientes y facturas
+from app.routers import clients, invoices, csv, pdf  # Importar las rutas de clientes y facturas
 from app.models.invoice_models import Base
 from app.db import engine  # Importar la función de creación de tablas
 
@@ -25,12 +25,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-
 # Incluir routers
 app.include_router(clients.router)  # Incluir el router de clientes
 app.include_router(invoices.router)  # Incluir el router de facturas
 app.include_router(csv.router)  # Incluir el router de facturas
+app.include_router(pdf.router)  # Incluir el router de facturas
 
 
 Base.metadata.create_all(bind=engine)
