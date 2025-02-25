@@ -52,3 +52,10 @@ async def leer_cliente(id: str, Session: Session = Depends(get_db)):
 async def leer_all_clients(Session: Session = Depends(get_db)):
     clientes = Session.query(Cliente).all()
     return clientes
+
+""" 
+@router.get('/clientes/insertar-codigo-galac/{id}', tags=["Insertar Codigo de Galac"])
+async def insertar_gcode(id: str, db: Session = Depends(get_db)):
+"""
+
+

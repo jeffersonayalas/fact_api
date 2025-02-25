@@ -25,16 +25,17 @@ def obtain_pdf(numero, token):
     try:
         # Realiza la petición POST a la API
         response = requests.post(API_URL, json=data, headers=headers)
-
-        print(response.content)
+        print(response.status_code)
 
         # Verifica si la solicitud fue exitosa
         if response.status_code == 200:
             # Guarda el contenido del PDF en un archivo
             with open("output.pdf", "wb") as pdf_file:
                 pdf_file.write(response.content)
-            return response.content
+            #print("PDF:" + str(response.content))
             print("PDF guardado como output.pdf")
+            return response.content
+            
         else:
             print(f"Error en la solicitud: {response.status_code}")
             print(response.text)  # Muestra el mensaje de error de la API si lo hay
@@ -90,6 +91,8 @@ def get_pdf(data):
     num_document = data
 
     obtain_pdf(num_document, token)
+
+get_pdf("00315161")
 
 
 
