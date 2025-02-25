@@ -33,3 +33,4 @@ app.include_router(pdf.router)  # Incluir el router de facturas
 
 
 Base.metadata.create_all(bind=engine)
+

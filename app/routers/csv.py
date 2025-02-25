@@ -106,6 +106,49 @@ def validar_y_generar_rif(documento):
 ###########################################################
 ###########################################################
 
+def buscar_cod_galac(rif):
+    # Abrir archivo
+    print("------------------------------------------- RIF: " + str(rif))
+    with open("db_contactos.txt", "r") as archivo:
+        # Leemos contenido del archivo
+        contenido = archivo.read()
+
+    rif_data = rif.replace("-", "").upper()
+
+    # Convertir el contenido a texto
+    contenido_texto = contenido.splitlines()
+    
+    # Inicializar cod_galac como None al inicio
+    cod_galac = None
+
+    for line in contenido_texto:
+        array = line.split(";")
+        
+        # Asegurar que haya suficiente longitud en array para evitar errores
+        if len(array) > 2:
+            rif_txt = array[2]
+            cod_galac = array[0]  # Asignar el código de Galac
+            if "-" in rif_txt:
+                rif_txt = array[2].replace("-", "").upper() #Normalizar el rif del txt
+            
+         
+            if rif_data in rif_txt:  # Compara el RIF enviado con el RIF en el archivo
+                print(f"RIF BD: {rif} RIF TXT: {rif_txt} CODIGO G: {cod_galac}")
+                return cod_galac
+
+    print("Código no encontrado.")
+    
+    # Guardar el rif no encontrado en el archivo clientes.txt
+    with open("clientes.txt", 'a') as clientes:  # Abrir en modo append
+        clientes.write(f"{rif}\n")
+
+    return None  # Retorna None si no se encontró el código
+
+
+###########################################################
+###########################################################
+###########################################################
+
 
 def search_client(rif: str, db: Session):
     """
