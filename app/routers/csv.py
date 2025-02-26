@@ -187,7 +187,7 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
     if file.content_type != 'text/csv':
         raise HTTPException(status_code=400, detail="El archivo debe ser un CSV")
     
-    print(f"\ud83d\udcc2 Nombre del archivo: {file.filename}")
+    print(f"📁 Nombre del archivo: {file.filename}")
 
     # Leer el archivo CSV
     contents = await file.read()
@@ -214,7 +214,7 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
 
     async def process_record(record):
         odoo_id = search_client(record.get('RIF'), db)
-        print(f"\ud83d\udd0d ID de cliente en Odoo: {odoo_id}")
+        print(f"📂  ID de cliente en Odoo: {odoo_id}")
 
         existing_factura = db.query(Factura).filter(
             Factura.numero_control == str(record.get('N de Control')),
@@ -223,7 +223,7 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
 
         if existing_factura:
             duplicados.append(record)
-            print(f"\ud83d\udd34 Entrada duplicada encontrada: {record}")
+            print(f"🔵 Entrada duplicada encontrada: {record}")
             return  # Ignorar esta entrada y continuar
 
         numero_factura_valor = record.get('N de Factura')
