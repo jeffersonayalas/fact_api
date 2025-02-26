@@ -7,6 +7,8 @@ from app.models.invoice_models import Cliente, Factura, FacturaCreate  # Asegúr
 from app.db import get_db
 import re
 import numpy as np
+import asyncio
+
 
 from .utils.odoo_con import buscar_cliente_odoo
 
@@ -110,73 +112,74 @@ def validar_y_generar_rif(documento):
 ###########################################################
 ###########################################################
 
-
 def search_client(rif: str, db: Session):
     """
-    Primero se busca al cliente en BD local, si no se encuentra se busca en Odoo
+    Primero busca al cliente en la BD local, si no se encuentra se busca en Odoo
     probando diferentes configuraciones de RIF y se mapea su RIF con su Odoo_Id.
     """
-    print(" ")
-    print(f"--- 🔍 Iniciando Busqueda: {rif} 🔍 ---")
+    print(f"--- 🔍 Buscando Cliente: {rif} 🔍 ---")
     posibles_rif = validar_y_generar_rif(rif)
 
-    print(f"⚠️ RIF POSIBLES FINAL: {posibles_rif}")
-    
+    print(f"⚠️ Posibles RIF: {posibles_rif}")
+
     for rif_attempt in posibles_rif:
         print(f"🔍 Buscando cliente con RIF: {rif_attempt}")
         client = db.query(Cliente).filter(Cliente.rif == rif_attempt).first()
-        
-        if client is not None:
-            print(f"✅ Cliente encontrado en la base de datos: {client.__dict__}")
+
+        if client:
+            print(f"✅ Cliente encontrado en BD local: {client.__dict__}")
             return client.odoo_id
-        
-        print(f"🟡 Cliente no encontrado en la base de datos. Buscando en Odoo con documento {rif_attempt}...")
-        client = buscar_cliente_odoo(rif_attempt)
-        
-        if isinstance(client, dict) and 'id' in client:
-            print(f"🔍 Cliente encontrado en Odoo con {rif_attempt}: {client}")
+
+        print(f"🟡 Cliente no encontrado en BD local. Buscando en Odoo con {rif_attempt}...")
+        client_odoo = buscar_cliente_odoo(rif_attempt)
+
+        if isinstance(client_odoo, dict) and 'id' in client_odoo:
+            odoo_id = client_odoo['id']
+
+            # 🔍 **Verificar si el odoo_id ya existe en la BD**
+            existing_client = db.query(Cliente).filter(Cliente.odoo_id == odoo_id).first()
+            if existing_client:
+                print(f"⚠️ Cliente ya existe en BD con diferente RIF: {existing_client.rif}")
+                return existing_client.odoo_id
+
             new_client = Cliente(
-                odoo_id=client.get('id'),
+                odoo_id=odoo_id,
                 rif=rif_attempt,
                 cod_galac="",
-                nombre_cliente=client.get('name', 'Nombre no disponible')
+                nombre_cliente=client_odoo.get('name', 'Nombre no disponible')
             )
+
             try:
                 db.add(new_client)
                 db.commit()
                 return new_client.odoo_id
             except IntegrityError:
                 db.rollback()
-                print(f"⚠️ Entrada duplicada detectada para Odoo ID {client.get('id')}, recuperando entrada existente...")
-                existing_client = db.query(Cliente).filter(Cliente.odoo_id == client.get('id')).first()
+                print(f"⚠️ Entrada duplicada detectada para Odoo ID {odoo_id}. Recuperando entrada existente...")
+                existing_client = db.query(Cliente).filter(Cliente.odoo_id == odoo_id).first()
                 
                 if existing_client:
-                    logging.error(f"Duplicated entry: {existing_client.__dict__}")
                     return existing_client.odoo_id
                 else:
-                    logging.error(f"⚠️ Error inesperado: el cliente con Odoo ID {client.get('id')} no fue encontrado después del error de duplicación.")
+                    logging.error(f"⚠️ Error inesperado: Odoo ID {odoo_id} no encontrado tras duplicación.")
                     return None
             except Exception as e:
                 db.rollback()
-                print(f"🔴 Error al guardar cliente en BD local: {str(e)}")
-                logging.error(f"Error inesperado al insertar cliente: {str(e)}")
+                print(f"🔴 Error al guardar cliente en BD: {str(e)}")
+                logging.error(f"Error inesperado: {str(e)}")
                 return None
-    
-    # Registrar en el log de cédulas no encontradas
-    cedula_not_found_logger.warning(f"😥 Cédula no encontrada: {rif}")
-    print(f"😥 Cliente no encontrado en ninguna variación en Odoo: {rif}")
+
+    print(f"😥 Cliente no encontrado en Odoo para ningún RIF posible: {rif}")
+    cedula_not_found_logger.warning(f"Cédula no encontrada: {rif}")
     return None
 
-###########################################################
-###########################################################
-###########################################################
 
-
-import asyncio
+###########################################################
+###########################################################
+###########################################################
 
 @router.post("/upload-csv/", tags=['Subir CSV'])
 async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
-    # Tu código aquí
     """
     Este endpoint recibe un archivo CSV generado por The factory y lo procesa para guardar los datos en la base de datos.
     """
@@ -184,7 +187,7 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
     if file.content_type != 'text/csv':
         raise HTTPException(status_code=400, detail="El archivo debe ser un CSV")
     
-    print(f"📂 Nombre del archivo: {file.filename}")
+    print(f"\ud83d\udcc2 Nombre del archivo: {file.filename}")
 
     # Leer el archivo CSV
     contents = await file.read()
@@ -196,7 +199,6 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
         raise HTTPException(status_code=400, detail="Formato de CSV inválido")
     except UnicodeDecodeError:
         raise HTTPException(status_code=400, detail="Error de codificación, asegúrate de que el archivo esté en UTF-8")
-
 
     # Limpiar nombres de columnas
     df.columns = df.columns.str.strip()
@@ -210,12 +212,10 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
     # Lista para almacenar entradas duplicadas
     duplicados = []
 
-    # Función asíncrona para procesar cada registro
     async def process_record(record):
         odoo_id = search_client(record.get('RIF'), db)
-        print(f"🔍 ID de cliente en Odoo: {odoo_id}")
+        print(f"\ud83d\udd0d ID de cliente en Odoo: {odoo_id}")
 
-        # Verificar si la factura ya existe
         existing_factura = db.query(Factura).filter(
             Factura.numero_control == str(record.get('N de Control')),
             Factura.rif == record.get('RIF')
@@ -223,8 +223,8 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
 
         if existing_factura:
             duplicados.append(record)
-            print(f"🔴 Entrada duplicada encontrada: {record}")
-            return  # Ignorar esta entrada y continuar con la siguiente
+            print(f"\ud83d\udd34 Entrada duplicada encontrada: {record}")
+            return  # Ignorar esta entrada y continuar
 
         numero_factura_valor = record.get('N de Factura')
         numero_factura = ""
@@ -240,7 +240,7 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
             numero_control=record.get('N de Control'),
             numero_factura=numero_factura,
             monto=convert_to_float(record.get('Total Ventas con IVA', 0.0)),
-            moneda='VES',  # Se podría hacer más flexible si fuera necesario
+            moneda='VES',
             razon_social=record.get('Nombre o Razon Social'),
             nota_debito=record.get('Nota de Debito'),
             nota_de_credito=record.get('Nota de Credito'),
@@ -263,25 +263,21 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
             odoo_id=odoo_id
         )
 
-        # Crear la factura en base de datos
-        factura = Factura(**factura_data.model_dump())  # Create SQLAlchemy object
+        factura = Factura(**factura_data.model_dump())
 
-        # Agregar la factura a la sesión
-        db.add(factura)
+        try:
+            db.add(factura)
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            print(f"⚠️ Factura duplicada detectada: {factura_data.numero_control}, {factura_data.rif}")
+            duplicados.append(record)
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(status_code=500, detail=f"Error al guardar en la base de datos: {str(e)}")
 
-    # Crear tareas asíncronas para cada registro
-    tasks = [process_record(record) for record in data_dict]
-
-    # Ejecutar todas las tareas en paralelo
-    await asyncio.gather(*tasks)
-
-    try:
-        # Confirmar los cambios en la base de datos
-        db.commit()
-    except Exception as e:
-        # Revertir los cambios en caso de error
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al guardar en la base de datos: {str(e)}")
+    # Ejecutar tareas en paralelo
+    await asyncio.gather(*(process_record(record) for record in data_dict))
 
     return JSONResponse(content={
         "message": "CSV procesado y datos guardados correctamente",
