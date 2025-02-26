@@ -213,6 +213,8 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
     duplicados = []
 
     async def process_record(record):
+        print("  ") # Espacio en blanco para legibilidad
+        print(f"📄 Procesando registro: {record}")
         odoo_id = search_client(record.get('RIF'), db)
         print(f"📂  ID de cliente en Odoo: {odoo_id}")
 
