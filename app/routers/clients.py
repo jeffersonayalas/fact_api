@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, File, UploadFile
 from sqlalchemy.orm import Session
 from app.models.invoice_models import ClienteResponse, ClienteBase, Cliente
 from sqlalchemy.exc import IntegrityError
 from app.db import get_db
-from typing import List
+from typing import List, Dict
+
 
 router = APIRouter()
 
@@ -53,9 +54,66 @@ async def leer_all_clients(Session: Session = Depends(get_db)):
     clientes = Session.query(Cliente).all()
     return clientes
 
-""" 
-@router.get('/clientes/insertar-codigo-galac/{id}', tags=["Insertar Codigo de Galac"])
-async def insertar_gcode(id: str, db: Session = Depends(get_db)):
-"""
 
+@router.post("/buscar-codigo", response_model=Dict[str, str], tags=["Insertar Codigo de Galac"])
+async def buscar_codigo(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    resultados = {}
+
+    # Crear un archivo para resultados
+    with open('clientes.txt', "a") as archivo:  # Usar "a" para agregar resultados
+        try:
+            # Obtener todos los clientes
+            clientes = db.query(Cliente).all()
+
+            # Leer el archivo .txt cargado
+            contenido = await file.read()
+
+            # Convertir el contenido a texto
+            contenido_texto = contenido.decode("utf-8").splitlines()
+
+            # Iterar sobre cada cliente
+            for cliente in clientes:
+                rif = cliente.rif.replace("-", "")
+
+                # Inicializar codigo_galac
+                codigo_galac = None 
+
+                # Iterar sobre el contenido del archivo
+                for line in contenido_texto:
+                    array = line.split(";")
+                    if len(array) < 3:  # Seguridad: Verificar que hay suficientes elementos
+                        continue
+
+                    # Obtener el RIF desde el archivo
+                    rif_txt = array[2].replace("-", "") 
+
+                    # Comparar RIFs
+                    if rif == rif_txt:
+                        codigo_galac = array[0]
+                        # Escribir al archivo resultados
+                        archivo.write(f"{rif} <----> {rif_txt}\n")
+                        print(f"RIF BD: {rif} RIF TXT: {rif_txt} CODIGO G: {codigo_galac}")
+
+                        # Verificar si cod_galac está vacío antes de asignar
+                        if not cliente.cod_galac:  # Asegúrate que esta propiedad existe
+                            cliente.cod_galac = codigo_galac  # Asigna el código de Galac
+                            db.add(cliente)  # Marca el cliente para actualización
+
+                        # Guardar el resultado en el diccionario
+                        resultado_clave = cliente.rif
+                        resultados[resultado_clave] = codigo_galac
+
+                if codigo_galac is None:
+                    archivo.write(f"RIF O CEDULA: {rif}\n")
+
+            # Hacer commit a la base de datos
+            db.commit()
+
+        except Exception as e:
+            archivo.write(f"Error: {str(e)}\n")
+            raise
+
+    return resultados
+
+    return resultados
 
