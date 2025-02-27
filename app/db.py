@@ -28,7 +28,7 @@ DATABASE_URL = URL.create(
     password=password,
     host=host,
     port=port,
-    database="data_facturas"#database
+    database=database
 )
 
 engine = create_engine(DATABASE_URL)

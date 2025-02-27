@@ -1,16 +1,26 @@
+version: '3.8'
 
 services:
-  postgres:
-    image: postgres:latest  # Usa la imagen oficial de PostgreSQL
-    container_name: postgres
-    ports:
-      - "5432:5432"  # Expone el puerto de PostgreSQL
+  db:
+    image: postgres:16
+    container_name: postgres_db
     environment:
-      - POSTGRES_USER=postgres  # Usuario de PostgreSQL
-      - POSTGRES_PASSWORD=123456  # Contraseña de PostgreSQL
-      - POSTGRES_DB=postgres  # Nombre de la base de datos
+      POSTGRES_USER: fran
+      POSTGRES_PASSWORD: 7448280
+      POSTGRES_DB: data_facturas2
     volumes:
-      - postgres_data:/var/lib/postgresql/data  # Persistir datos de la base de datos
+      - ./postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
 
-volumes:
-  postgres_data:  # Define un volumen para almacenar datos de PostgreSQL
+  fact_api_volume:
+    image: fact_api
+    container_name: fact_api
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql://fran:7448280@db:5432/data_facturas2
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/fact_api_volume

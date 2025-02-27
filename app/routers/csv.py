@@ -5,22 +5,26 @@ import pandas as pd
 from sqlalchemy.orm import Session
 from app.models.invoice_models import Cliente, Factura, FacturaCreate  # Asegúrate de importar tus modelos
 from app.db import get_db
+import re
 import numpy as np
+import asyncio
+
+
 from .utils.odoo_con import buscar_cliente_odoo
-import requests
 
 router = APIRouter()
 
 # Función para convertir valores a flotante con manejo de excepciones
+
 def convert_to_float(value):
     try:
-        if value is None or value == '':
-            return 0.0  # En lugar de None, devolvemos 0.0
-        if isinstance(value, str):
-            return float(value.replace(',', '.'))
+        if not value or str(value).strip() == '':
+            return 0.0
+        value = re.sub(r'[^\d,.-]', '', str(value))  # Elimina caracteres extraños
+        value = value.replace(',', '.')  # Convertir a punto decimal
         return float(value)
     except (ValueError, TypeError):
-        return 0.0  # En caso de error, devolvemos 0.0
+        return 0.0
 
 
 
@@ -29,7 +33,10 @@ def convert_to_float(value):
 #########################################################
 
 def agregar_ceros(numero):
+    if not numero:
+        return "00000000"
     return str(numero).zfill(8)
+
 
 ###########################################################
 ###########################################################
@@ -47,7 +54,6 @@ def convert_to_date(value):
 ###########################################################
 ###########################################################
 
-import re
 import logging
 from sqlalchemy.exc import IntegrityError
 
@@ -87,7 +93,7 @@ def validar_y_generar_rif(documento):
     documento = documento.strip().upper()  # Normalizar el documento
     
     # Expresión regular para validar el formato del RIF
-    rif_pattern = re.compile(r'^[VJGP]-\d{4,}$')
+    rif_pattern = re.compile(r'^[VJGP]-\d{6,}$')
     
     # Validar si el documento tiene un formato de RIF válido
     if rif_pattern.match(documento):
@@ -106,89 +112,87 @@ def validar_y_generar_rif(documento):
 ###########################################################
 ###########################################################
 
-
 def search_client(rif: str, db: Session):
-    """
-    Primero se busca al cliente en BD local, si no se encuentra se busca en Odoo
-    probando diferentes configuraciones de RIF y se mapea su RIF con su Odoo_Id.
-    """
-    print(" ")
-    print(f"--- 🔍 Iniciando Busqueda: {rif} 🔍 ---")
+    print(f"--- 🔍 Buscando Cliente: {rif} 🔍 ---")
     posibles_rif = validar_y_generar_rif(rif)
+    print(f"⚠️ Posibles RIF: {posibles_rif}")
 
-    print(f"⚠️ RIF POSIBLES FINAL: {posibles_rif}")
-    
     for rif_attempt in posibles_rif:
         print(f"🔍 Buscando cliente con RIF: {rif_attempt}")
         client = db.query(Cliente).filter(Cliente.rif == rif_attempt).first()
-        
-        if client is not None:
-            print(f"✅ Cliente encontrado en la base de datos: {client.__dict__}")
+
+        if client:
+            print(f"✅ Cliente encontrado en BD local: {client.__dict__}")
             return client.odoo_id
-        
-        print(f"🟡 Cliente no encontrado en la base de datos. Buscando en Odoo con documento {rif_attempt}...")
-        client = buscar_cliente_odoo(rif_attempt)
-        
-        if isinstance(client, dict) and 'id' in client:
-            print(f"🔍 Cliente encontrado en Odoo con {rif_attempt}: {client}")
+
+        print(f"🟡 Cliente no encontrado en BD local. Buscando en Odoo con {rif_attempt}...")
+        client_odoo = buscar_cliente_odoo(rif_attempt)
+
+        if isinstance(client_odoo, dict) and 'id' in client_odoo:
+            odoo_id = client_odoo['id']
+
+            # Asegúrate de que odoo_id sea del tipo correcto
+            existing_client = db.query(Cliente).filter(Cliente.odoo_id == str(odoo_id)).first()
+            if existing_client:
+                print(f"⚠️ Cliente ya existe en BD con diferente RIF: {existing_client.rif}")
+                return existing_client.odoo_id
+
             new_client = Cliente(
-                odoo_id=client.get('id'),
+                odoo_id=str(odoo_id),  # Asegúrate de que se guarde como string si es necesario
                 rif=rif_attempt,
                 cod_galac="",
-                nombre_cliente=client.get('name', 'Nombre no disponible')
+                nombre_cliente=client_odoo.get('name', 'Nombre no disponible')
             )
+
             try:
                 db.add(new_client)
                 db.commit()
                 return new_client.odoo_id
             except IntegrityError:
                 db.rollback()
-                print(f"⚠️ Entrada duplicada detectada para Odoo ID {client.get('id')}, recuperando entrada existente...")
-                existing_client = db.query(Cliente).filter(Cliente.odoo_id == client.get('id')).first()
+                print(f"⚠️ Entrada duplicada detectada para Odoo ID {odoo_id}. Recuperando entrada existente...")
+                existing_client = db.query(Cliente).filter(Cliente.odoo_id == str(odoo_id)).first()
                 
                 if existing_client:
-                    logging.error(f"Duplicated entry: {existing_client.__dict__}")
                     return existing_client.odoo_id
                 else:
-                    logging.error(f"⚠️ Error inesperado: el cliente con Odoo ID {client.get('id')} no fue encontrado después del error de duplicación.")
+                    logging.error(f"⚠️ Error inesperado: Odoo ID {odoo_id} no encontrado tras duplicación.")
                     return None
             except Exception as e:
                 db.rollback()
-                print(f"🔴 Error al guardar cliente en BD local: {str(e)}")
-                logging.error(f"Error inesperado al insertar cliente: {str(e)}")
+                print(f"🔴 Error al guardar cliente en BD: {str(e)}")
+                logging.error(f"Error inesperado: {str(e)}")
                 return None
-    
-    # Registrar en el log de cédulas no encontradas
-    cedula_not_found_logger.warning(f"😥 Cédula no encontrada: {rif}")
-    print(f"😥 Cliente no encontrado en ninguna variación en Odoo: {rif}")
+
+    print(f"😥 Cliente no encontrado en Odoo para ningún RIF posible: {rif}")
+    cedula_not_found_logger.warning(f"Cédula no encontrada: {rif}")
     return None
 
 ###########################################################
 ###########################################################
 ###########################################################
 
-
 @router.post("/upload-csv/", tags=['Subir CSV'])
 async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
-    Este endpoint recibe un archivo CSV generadop por The factory y lo procesa para guardar los datos en la base de datos.
+    Este endpoint recibe un archivo CSV generado por The factory y lo procesa para guardar los datos en la base de datos.
     """
     # Verificar que el archivo sea un CSV
     if file.content_type != 'text/csv':
         raise HTTPException(status_code=400, detail="El archivo debe ser un CSV")
     
-    print(f"📂 Nombre del archivo: {file.filename}")
+    print(f"📁 Nombre del archivo: {file.filename}")
 
     # Leer el archivo CSV
     contents = await file.read()
     string_io = StringIO(contents.decode('utf-8'))
     
     try:
-        # Leer el CSV, ignorando las primeras 7 filas y usando ';' como separador
-        df = pd.read_csv(string_io, encoding='utf-8', sep=';', skiprows=7)
-    except Exception as e:
-        print(e)
-        raise HTTPException(status_code=400, detail="Error al procesar el CSV")
+        df = pd.read_csv(string_io, encoding='utf-8', sep=';', skiprows=7, dtype=str)  # Lee todo como string
+    except pd.errors.ParserError:
+        raise HTTPException(status_code=400, detail="Formato de CSV inválido")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Error de codificación, asegúrate de que el archivo esté en UTF-8")
 
     # Limpiar nombres de columnas
     df.columns = df.columns.str.strip()
@@ -199,16 +203,15 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
     # Convertir el DataFrame a un diccionario
     data_dict = df.to_dict(orient='records')
 
-    # Imprimir el diccionario resultante
-    # print("📄 Diccionario resultante:")
-    # print(data_dict)
-
     # Lista para almacenar entradas duplicadas
     duplicados = []
 
-    # Mapear y guardar en la base de datos
-    for record in data_dict:
-        # Verificar si la factura ya existe
+    async def process_record(record):
+        print("  ")  # Espacio en blanco para legibilidad
+        print(f"📄 Procesando registro: {record}")
+        odoo_id = search_client(record.get('RIF'), db)
+        print(f"📂  ID de cliente en Odoo: {odoo_id}")
+
         existing_factura = db.query(Factura).filter(
             Factura.numero_control == str(record.get('N de Control')),
             Factura.rif == record.get('RIF')
@@ -216,12 +219,8 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
 
         if existing_factura:
             duplicados.append(record)
-            print(f"🍴 Entrada duplicada encontrada: {record}")
-            continue  # Ignorar esta entrada y continuar con la siguiente
-        
-        odoo_id = search_client(record.get('RIF'), db)
-        print(f"🔍 ID de cliente en Odoo: {odoo_id}")
-
+            print(f"🔵 Entrada duplicada encontrada: {record}")
+            return  # Ignorar esta entrada y continuar
 
         numero_factura_valor = record.get('N de Factura')
         numero_factura = ""
@@ -237,12 +236,12 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
             numero_control=record.get('N de Control'),
             numero_factura=numero_factura,
             monto=convert_to_float(record.get('Total Ventas con IVA', 0.0)),
-            moneda='VES',  # Se podría hacer más flexible si fuera necesario
+            moneda='VES',
             razon_social=record.get('Nombre o Razon Social'),
             nota_debito=record.get('Nota de Debito'),
-            nota_de_credito=str(record.get('Nota de Credito', "")),  # Convertir a str
+            nota_de_credito=record.get('Nota de Credito'),
             tipo_de_operacion=record.get('Tipo Operacion'),
-            numero_documento=str(record.get('N Documento Afectado', "")),  # Convertir a str
+            numero_documento=record.get('N Documento Afectado'),
             fecha_comprobante=convert_to_date(record.get('Fecha Comprobante Retencion')),
             base_imponible_g=convert_to_float(record.get('Base Imponible G', 0.0)),
             por_alicuota_g=convert_to_float(record.get('% Alicuota G', 0.0)),
@@ -260,21 +259,22 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
             odoo_id=odoo_id
         )
 
+        factura = Factura(**factura_data.model_dump())
 
-        # Crear la factura en base de datos
-        factura = Factura(**factura_data.model_dump())  # Create SQLAlchemy object
+        try:
+            db.add(factura)
+            db.commit()
+            print(f"✅ Factura guardada: {factura_data.numero_control}")
+        except IntegrityError:
+            db.rollback()
+            print(f"⚠️ Factura duplicada detectada: {factura_data.numero_control}, {factura_data.rif}")
+            duplicados.append(record)
+        except Exception as e:
+            db.rollback()
+            print(f"🔴 Error al guardar en la base de datos: {str(e)}")
 
-        # Agregar la factura a la sesión
-        db.add(factura)
-
-    try:
-        # Confirmar los cambios en la base de datos
-        db.commit()
-    except Exception as e:
-        # Revertir los cambios en caso de error
-        logging.error(f"Error: {e}")
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al guardar en la base de datos: {str(e)}")
+    # Ejecutar tareas en paralelo
+    await asyncio.gather(*(process_record(record) for record in data_dict))
 
     return JSONResponse(content={
         "message": "CSV procesado y datos guardados correctamente",

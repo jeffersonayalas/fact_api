@@ -1,7 +1,0 @@
-[{'id': 225931, 
-'vat': 'J-405159197', 
-'name': '10836 - DLC EAGLE, C.A.', 
-'email': 'delacruzaristides@gmail.com', 'street': 'Av Salvador Feo La Cruz Sur-Norte Calle De Servicio Frente A Cc Concepto La Granja. Local De Tealca', 'phone': '+584265467715', 'ref': '10836'}]
-{'id': 225931, 'vat': 'J-405159197', 'name': '10836 - DLC EAGLE, C.A.', 'email': 'delacruzaristides@gmail.com', 'street': 'Av Salvador Feo La Cruz Sur-Norte Calle De Servicio Frente A Cc Concepto La Granja. Local De Tealca', 'phone': '+584265467715', 'ref': '10836'}
-🔍 Cliente encontrado en Odoo: {'id': 225931, 'name': 'DLC EAGLE, C.A.', 'email': 'delacruzaristides@gmail.com', 'ci': 'J-405159197', 'street': 'Av Salvador Feo La Cruz Sur-Norte Calle De Servicio Frente A Cc Concepto La Granja. Local De Tealca', 'phone': '+584265467715', 'ref': '10836'}
-🔍 ID de cliente en Odoo: 225931
