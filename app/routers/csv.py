@@ -113,13 +113,8 @@ def validar_y_generar_rif(documento):
 ###########################################################
 
 def search_client(rif: str, db: Session):
-    """
-    Primero busca al cliente en la BD local, si no se encuentra se busca en Odoo
-    probando diferentes configuraciones de RIF y se mapea su RIF con su Odoo_Id.
-    """
     print(f"--- 🔍 Buscando Cliente: {rif} 🔍 ---")
     posibles_rif = validar_y_generar_rif(rif)
-
     print(f"⚠️ Posibles RIF: {posibles_rif}")
 
     for rif_attempt in posibles_rif:
@@ -136,14 +131,14 @@ def search_client(rif: str, db: Session):
         if isinstance(client_odoo, dict) and 'id' in client_odoo:
             odoo_id = client_odoo['id']
 
-            # 🔍 **Verificar si el odoo_id ya existe en la BD**
-            existing_client = db.query(Cliente).filter(Cliente.odoo_id == odoo_id).first()
+            # Asegúrate de que odoo_id sea del tipo correcto
+            existing_client = db.query(Cliente).filter(Cliente.odoo_id == str(odoo_id)).first()
             if existing_client:
                 print(f"⚠️ Cliente ya existe en BD con diferente RIF: {existing_client.rif}")
                 return existing_client.odoo_id
 
             new_client = Cliente(
-                odoo_id=odoo_id,
+                odoo_id=str(odoo_id),  # Asegúrate de que se guarde como string si es necesario
                 rif=rif_attempt,
                 cod_galac="",
                 nombre_cliente=client_odoo.get('name', 'Nombre no disponible')
@@ -156,7 +151,7 @@ def search_client(rif: str, db: Session):
             except IntegrityError:
                 db.rollback()
                 print(f"⚠️ Entrada duplicada detectada para Odoo ID {odoo_id}. Recuperando entrada existente...")
-                existing_client = db.query(Cliente).filter(Cliente.odoo_id == odoo_id).first()
+                existing_client = db.query(Cliente).filter(Cliente.odoo_id == str(odoo_id)).first()
                 
                 if existing_client:
                     return existing_client.odoo_id
@@ -172,7 +167,6 @@ def search_client(rif: str, db: Session):
     print(f"😥 Cliente no encontrado en Odoo para ningún RIF posible: {rif}")
     cedula_not_found_logger.warning(f"Cédula no encontrada: {rif}")
     return None
-
 
 ###########################################################
 ###########################################################
@@ -213,7 +207,7 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
     duplicados = []
 
     async def process_record(record):
-        print("  ") # Espacio en blanco para legibilidad
+        print("  ")  # Espacio en blanco para legibilidad
         print(f"📄 Procesando registro: {record}")
         odoo_id = search_client(record.get('RIF'), db)
         print(f"📂  ID de cliente en Odoo: {odoo_id}")
@@ -270,13 +264,14 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
         try:
             db.add(factura)
             db.commit()
+            print(f"✅ Factura guardada: {factura_data.numero_control}")
         except IntegrityError:
             db.rollback()
             print(f"⚠️ Factura duplicada detectada: {factura_data.numero_control}, {factura_data.rif}")
             duplicados.append(record)
         except Exception as e:
             db.rollback()
-            raise HTTPException(status_code=500, detail=f"Error al guardar en la base de datos: {str(e)}")
+            print(f"🔴 Error al guardar en la base de datos: {str(e)}")
 
     # Ejecutar tareas en paralelo
     await asyncio.gather(*(process_record(record) for record in data_dict))

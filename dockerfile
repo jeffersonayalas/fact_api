@@ -20,7 +20,7 @@ ENV DB_USER="fran"
 ENV DB_PASSWORD="7448280"
 ENV DB_HOST="172.17.0.1"
 ENV DB_PORT="5432"
-ENV DB_NAME="data_facturas2"
+ENV DB_NAME="data_facturas"
 
 # Comando para ejecutar la aplicación
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8080"]

@@ -1,15 +1,26 @@
 version: '3.8'
 
 services:
-  fastapi_app:
-    build: ..
+  db:
+    image: postgres:16
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: fran
+      POSTGRES_PASSWORD: 7448280
+      POSTGRES_DB: data_facturas2
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  fact_api_volume:
+    image: fact_api
     container_name: fact_api
-    restart: always
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql://fran:7448280@db:5432/data_facturas2
     ports:
       - "8080:8080"
     volumes:
-      - .:/app
-    working_dir: /app
-    environment:
-      - PYTHONUNBUFFERED=1
-    depends_on: []
+      - .:/fact_api_volume

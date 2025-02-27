@@ -32,26 +32,23 @@ def buscar_cliente_odoo(ci :str):
 
     models = xmlrpc.client.ServerProxy('{}/xmlrpc/2/object'.format(url))
 
-    client_id = models.execute_kw(db, uid, password, 'res.partner.category', 'search', [[['name','=','Clientes']]])[0]
+    client_id = models.execute_kw(db, uid, password, 'res.partner.category', 'search', [[['name','=','OPORTUNIDAD']]])[0]
 
     model_search = 'identification_id' if ((ci[0] == "V" or ci[0] == "E") and len(ci[2:]) < 8) else 'vat'
     ci = ci[2:] if (ci[0] == "V" or ci[0] == "E") else ci
     print(f"CI: {ci}")
 
-    client_info = models.execute_kw(db, uid, password, 'res.partner', 'search', [['&',[model_search,'like', ci],['category_id','=',[client_id]]]])
-
+    client_info = models.execute_kw(db, uid, password, 'res.partner', 'search', [['&',[model_search,'like', ci],['category_id','!=',[client_id]], ['parent_id', '=', False]]])
 
     print(client_info)
     # print(client_info)
     if len(client_info) > 1:
-        return buscar_cliente_odoo2(ci)
+        return 'mas de un id'
 
     if not client_info:
         return False
     # Luego, obtenemos la información del cliente usando el id
     client_info = models.execute_kw(db, uid, password, 'res.partner', 'read', [client_info[0]], {'fields': ['vat', 'name', 'email', 'street', 'phone', 'ref']})
-
-    
 
     if not client_info:
         return False
