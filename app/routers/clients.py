@@ -5,41 +5,51 @@ from sqlalchemy.exc import IntegrityError
 from app.db import get_db
 from typing import List, Dict
 
+def verify_rif(rif):
+    rif = rif.split("-")
+    number_rif = rif[1]
+
+    if len(number_rif) > 8 : #Devover posible rif 
+        return number_rif
+
 
 router = APIRouter()
 
 @router.post("/clientes/", response_model=ClienteResponse, tags=['Insertar Cliente'])
 async def insert_cliente(cliente: ClienteBase, db: Session = Depends(get_db)):
     # Verifica si ya existe un cliente con el mismo RIF
-    existing_cliente = db.query(Cliente).filter(Cliente.rif == cliente.rif).first()
+    existing_cliente = db.query(Cliente).filter(Cliente.rif.like(f"%{cliente.rif}%")).first()
     
     if existing_cliente:
         raise HTTPException(status_code=400, detail="El cliente ya existe con ese RIF.")
+    
+        existing_cliente = db.query(Cliente).filter(Cliente.odoo_id == cliente.odoo_id).first()
 
-    try:
-        # Crea una nueva instancia de Cliente usando los datos recibidos
-        new_cliente = Cliente(**cliente.dict())
+        if existing_cliente:
+            # Aquí puedes decidir si quieres lanzar un error,
+            # actualizar el cliente existente o manejarlo de otra manera.
+            raise HTTPException(status_code=400, detail="El cliente ya existe con el mismo odoo_id.")
+    
+    # Crea una nueva instancia de Cliente usando los datos recibidos
+    new_cliente = Cliente(**cliente.dict())
 
-        # Añadir el cliente a la sesión de la base de datos
-        db.add(new_cliente)
+    # Añadir el cliente a la sesión de la base de datos
+    db.add(new_cliente)
 
-        # Confirmar los cambios en la base de datos
-        db.commit()
+    # Confirmar los cambios en la base de datos
+    db.commit()
 
-        # Refrescar el objeto para obtener el estado más actualizado
-        db.refresh(new_cliente)
+    # Refrescar el objeto para obtener el estado más actualizado
+    db.refresh(new_cliente)
 
-        print(new_cliente)  # Para ver el nuevo cliente agregado
-        return new_cliente
-
-    except IntegrityError as e:
-        db.rollback()  # Deshacer la transacción en caso de un error de integridad
-        raise HTTPException(status_code=400, detail="Error al crear cliente: Integridad de datos.")
-
-    except Exception as e:  # Captura cualquier otra excepción
-        db.rollback()  # Deshacer la transacción en caso de error
-        print(new_cliente)  # Debugging
-        raise HTTPException(status_code=500, detail=f"Error al crear cliente: {str(e)}")
+    # Devolver el cliente como ClienteResponse, asegurando que uuid es un string
+    return ClienteResponse(
+        uuid=str(new_cliente.uuid),  # Convertir UUID a string
+        odoo_id=str(new_cliente.odoo_id),  # Asegúrate de que otros campos también sean cadenas si es necesario
+        rif=new_cliente.rif,
+        cod_galac=new_cliente.cod_galac,
+        nombre_cliente=new_cliente.nombre_cliente
+    )
 
 @router.get("/clientes/{id}", tags=['Leer Cliente'])
 async def leer_cliente(id: str, Session: Session = Depends(get_db)):
@@ -115,5 +125,4 @@ async def buscar_codigo(file: UploadFile = File(...), db: Session = Depends(get_
 
     return resultados
 
-    return resultados
 
